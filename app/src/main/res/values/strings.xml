@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ClassifyX</string>
+    <string name="takeP">Take a Picture</string>
+    <string name="or">OR</string>
+    <string name="chooseP">Pick a Picture</string>
+    <string name="predict">Predict</string>
+</resources>
