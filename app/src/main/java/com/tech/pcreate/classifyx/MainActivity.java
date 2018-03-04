@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.media.MediaScannerConnection;
+import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
@@ -14,6 +16,7 @@ import android.provider.MediaStore;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -21,34 +24,43 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.tech.pcreate.classifyx.R;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+
+import static android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final int IMG_SIZE = 64;
     private FloatingActionButton btn;
+    private Button predB;
     private ImageView imageview;
+    private TextView resText;
     private static final String IMAGE_DIRECTORY = "/ClassifyX";
     private int GALLERY = 1, CAMERA = 2;
     public static final int REQUEST_ID_MULTIPLE_PERMISSIONS = 1;
-    private static int SPLASH_TIME_OUT = 20;
-    private String TAG = "tag";
+    private String TAG = "MAIN ACTIVITY";
     boolean doubleBackToExitPressedOnce = false;
-
-    //LinearLayout lL1 = findViewById(R.id.first);
-    //LinearLayout lL = findViewById(R.id.ImageLay);
-
+    private Uri fileUri;
+    private List<Classifier> mClassifiers = new ArrayList<>();
+    private static final int IMAGE_MEAN = 0;
+    private static final float IMAGE_STD = 255;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,19 +68,33 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         btn = (FloatingActionButton) findViewById(R.id.btn);
         imageview = (ImageView) findViewById(R.id.iv);
-
-        //lL1.setVisibility(View.VISIBLE);
-        //lL.setVisibility(View.GONE);
         btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showPictureDialog();
             }
         });
-
-
+        predB = (Button) findViewById(R.id.predictBtn);
+        resText = (TextView) findViewById(R.id.takenPic);
+        checkAndRequestPermissions();
+        loadClassifier();
 
     }
+    private void loadClassifier(){
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {mClassifiers.add(
+                        TensorFlowClassifier.create(getAssets(),
+                                "xray.pb", "labels.txt", IMG_SIZE,
+                                "conv2d_1_input", "dense_2/Sigmoid"));
+                } catch (final Exception e) {
+                    throw new RuntimeException("Error initializing classifiers!", e);
+                }
+            }
+        }).start();
+    }
+
     @Override
     public void onBackPressed() {
         LinearLayout lL1 = findViewById(R.id.first);
@@ -76,6 +102,7 @@ public class MainActivity extends AppCompatActivity {
         if(lL.getVisibility() == View.VISIBLE){
             lL1.setVisibility(View.VISIBLE);
             lL.setVisibility(View.GONE);
+            resText.setText("");
         }
         if (doubleBackToExitPressedOnce) {
             super.onBackPressed();
@@ -95,7 +122,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private  boolean checkAndRequestPermissions() {
+    private  void checkAndRequestPermissions() {
         int camerapermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
         int writepermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
@@ -111,9 +138,8 @@ public class MainActivity extends AppCompatActivity {
 
         if (!listPermissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]), REQUEST_ID_MULTIPLE_PERMISSIONS);
-            return false;
+
         }
-        return true;
     }
 
     @Override
@@ -135,16 +161,14 @@ public class MainActivity extends AppCompatActivity {
                     if (perms.get(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
                             && perms.get(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
                         Log.d(TAG, "sms & location services permission granted");
-                        // process the normal flow
-                        Intent i = new Intent(MainActivity.this, WelcomeActivity.class);
-                        startActivity(i);
-                        finish();
+
+                        recreate();
                         //else any one or both the permissions are not granted
                     } else {
                         Log.d(TAG, "Some permissions are not granted ask again ");
                         //permission is denied (this is the first time, when "never ask again" is not checked) so ask again explaining the usage of permission
-//                        // shouldShowRequestPermissionRationale will return true
-                        //show the dialog or snackbar saying its necessary and try again otherwise proceed with setup.
+                       // shouldShowRequestPermissionRationale will return true
+                        //show the dialog saying its necessary and try again otherwise proceed with setup.
                         if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)
                                 || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                             showDialogOK("Service Permissions are required for this app",
@@ -216,7 +240,7 @@ public class MainActivity extends AppCompatActivity {
                     public void onClick(DialogInterface dialog, int which) {
                         switch (which) {
                             case 0:
-                                choosePhotoFromGallary();
+                                choosePhotoFromGallery();
                                 break;
                             case 1:
                                 takePhotoFromCamera();
@@ -227,7 +251,7 @@ public class MainActivity extends AppCompatActivity {
         pictureDialog.show();
     }
 
-    public void choosePhotoFromGallary() {
+    public void choosePhotoFromGallery() {
         Intent galleryIntent = new Intent(Intent.ACTION_PICK,
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
 
@@ -236,6 +260,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void takePhotoFromCamera() {
         Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+        fileUri = getOutputMediaFileUri(MEDIA_TYPE_IMAGE);
+
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, fileUri);
         startActivityForResult(intent, CAMERA);
     }
 
@@ -250,14 +277,19 @@ public class MainActivity extends AppCompatActivity {
             if (data != null) {
                 Uri contentURI = data.getData();
                 try {
-                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), contentURI);
-                    //String path = saveImage(bitmap);
-                    //Toast.makeText(MainActivity.this, "Image Saved!", Toast.LENGTH_SHORT).show();
+                    final Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), contentURI);
                     LinearLayout lL1 = findViewById(R.id.first);
                     lL1.setVisibility(View.GONE);
                     LinearLayout lL = findViewById(R.id.ImageLay);
                     lL.setVisibility(View.VISIBLE);
                     imageview.setImageBitmap(bitmap);
+                    predB.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            resText.setText("");
+                            loadModel(bitmap);
+                        }
+                    });
 
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -266,44 +298,117 @@ public class MainActivity extends AppCompatActivity {
             }
 
         } else if (requestCode == CAMERA) {
-            Bitmap thumbnail = (Bitmap) data.getExtras().get("data");
-            LinearLayout lL1 = findViewById(R.id.first);
-            lL1.setVisibility(View.GONE);
-            LinearLayout lL = findViewById(R.id.ImageLay);
-            lL.setVisibility(View.VISIBLE);
-            imageview.setImageBitmap(thumbnail);
-            saveImage(thumbnail);
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 8;
+            final Bitmap bitmap;
+            try {
+                bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(fileUri));
+                LinearLayout lL1 = findViewById(R.id.first);
+                lL1.setVisibility(View.GONE);
+                LinearLayout lL = findViewById(R.id.ImageLay);
+                lL.setVisibility(View.VISIBLE);
+                predB.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        resText.setText("");
+                        loadModel(bitmap);
+                    }
+                });
+                imageview.setImageBitmap(bitmap);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+
+
             Toast.makeText(MainActivity.this, "Image Saved!", Toast.LENGTH_SHORT).show();
         }
     }
 
-    public String saveImage(Bitmap myBitmap) {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        myBitmap.compress(Bitmap.CompressFormat.JPEG, 90, bytes);
-        File wallpaperDirectory = new File(
-                Environment.getExternalStorageDirectory() + IMAGE_DIRECTORY);
-        // have the object build the directory structure, if needed.
-        if (!wallpaperDirectory.exists()) {
-            wallpaperDirectory.mkdirs();
+    private void loadModel(Bitmap bitmap) {
+
+        if(bitmap.getWidth() != IMG_SIZE || bitmap.getHeight() != IMG_SIZE)   bitmap = Bitmap.createScaledBitmap(bitmap, IMG_SIZE, IMG_SIZE, false);
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+
+        float[] retPixels = new float[width * height * 3];
+
+        for (int i = 0; i < pixels.length; i++) {
+            final int val = pixels[i];
+            retPixels[i * 3] = (((val >> 16) & 0xFF) - IMAGE_MEAN) / IMAGE_STD;
+            retPixels[i * 3 + 1] = (((val >> 8) & 0xFF) - IMAGE_MEAN) / IMAGE_STD;
+            retPixels[i * 3 + 2] = ((val & 0xFF) - IMAGE_MEAN) / IMAGE_STD;
         }
 
-        try {
-            File f = new File(wallpaperDirectory, Calendar.getInstance()
-                    .getTimeInMillis() + ".jpg");
-            f.createNewFile();
-            FileOutputStream fo = new FileOutputStream(f);
-            fo.write(bytes.toByteArray());
-            MediaScannerConnection.scanFile(this,
-                    new String[]{f.getPath()},
-                    new String[]{"image/jpeg"}, null);
-            fo.close();
-            Log.d("TAG", "File Saved::--->" + f.getAbsolutePath());
-
-            return f.getAbsolutePath();
-        } catch (IOException e1) {
-            e1.printStackTrace();
+        String text = "";
+        for (Classifier classifier : mClassifiers) {
+            //perform classification on the image
+            final Classification res = classifier.recognize(retPixels);
+            //if it can't classify, output a question mark
+            if (res.getLabel() == null) {
+                text += ": ?\n";
+            } else {
+                //else output its name
+                text += String.format(Locale.US, "%s", res.getLabel()
+                        );
+            }
         }
-        return "";
+        resText.setText(text);
+    }
+
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        // save file url in bundle as it will be null if screen orientation changes
+
+        outState.putParcelable("file_uri", fileUri);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+
+        // get the file url
+
+        fileUri = savedInstanceState.getParcelable("file_uri");
+    }
+
+    public Uri getOutputMediaFileUri(int type) {
+        Uri photoURI = FileProvider.getUriForFile(MainActivity.this,
+                BuildConfig.APPLICATION_ID + ".provider",
+                getOutputMediaFile(type));
+        return photoURI;
+       // return Uri.fromFile(getOutputMediaFile(type));
+    }
+
+    private static File getOutputMediaFile(int type) {
+
+        // External sdcard location
+        File mediaStorageDir = new File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), IMAGE_DIRECTORY);
+
+        // Create the storage directory if it does not exist
+        if (!mediaStorageDir.exists()) {
+            if (!mediaStorageDir.mkdirs()) {
+                Log.d(IMAGE_DIRECTORY, "Oops! Failed create "
+                        + IMAGE_DIRECTORY + " directory");
+                return null;
+            }
+        }
+
+        // Create a media file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss",
+                Locale.getDefault()).format(new Date());
+        File mediaFile;
+
+            mediaFile = new File(mediaStorageDir.getPath() + File.separator
+                    + "IMG_" + timeStamp + ".jpg");
+
+        return mediaFile;
     }
 
 }

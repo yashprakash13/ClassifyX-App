@@ -1,0 +1,5 @@
+Atelectasis
+Cardiomegaly
+Effusion
+Fibrosis
+Infiltration
