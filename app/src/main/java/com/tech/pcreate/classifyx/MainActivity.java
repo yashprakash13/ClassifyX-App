@@ -348,7 +348,7 @@ public class MainActivity extends AppCompatActivity {
             final Classification res = classifier.recognize(retPixels);
             //if it can't classify, output a question mark
             if (res.getLabel() == null) {
-                text += ": ?\n";
+                text += "No Prediction\n";
             } else {
                 //else output its name
                 text += String.format(Locale.US, "%s", res.getLabel()

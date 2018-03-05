@@ -1,0 +1,11 @@
+#Internal package file, do not edit.
+#Sun Mar 04 12:56:32 IST 2018
+1.base=C\:\\Users\\Costa\\Desktop\\Ultimate\\ClassifyX\\app\\build\\intermediates\\assets\\debug
+0.baseType=DIRECTORY
+1.baseType=DIRECTORY
+count=2
+1.set=ASSET
+0.path=xray.pb
+0.set=ASSET
+0.base=C\:\\Users\\Costa\\Desktop\\Ultimate\\ClassifyX\\app\\build\\intermediates\\assets\\debug
+1.path=labels.txt
