@@ -1,5 +1,6 @@
 # ClassifyX-App
-https://github.com/yashprakash13/ClassifyX-App/blob/master/ClassifyX%20Img/38298899-47787e5c-3816-11e8-906f-cf7fe1db092a%20(1).png
+
+![38298899-47787e5c-3816-11e8-906f-cf7fe1db092a 1](https://user-images.githubusercontent.com/34805906/51787010-7e55ba00-2192-11e9-8995-980fc5145f8b.png)
 
 
 
